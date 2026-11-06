@@ -801,7 +801,7 @@ pub async fn get_rendezvous_server(ms_timeout: u64) -> (String, Vec<String>, boo
     }
     let mut b: Vec<String> = b
         .drain(..)
-        .map(|x| socket_client::check_port(x, config::RENDEZVOUS_PORT))
+        .map(|x| socket_client::check_port(x, *config::RENDEZVOUS_PORT))
         .collect();
     let c = if b.contains(&a) {
         b = b.drain(..).filter(|x| x != &a).collect();
@@ -852,7 +852,7 @@ async fn test_rendezvous_server_() {
         futs.push(tokio::spawn(async move {
             let tm = std::time::Instant::now();
             if socket_client::connect_tcp(
-                crate::check_port(&host, RENDEZVOUS_PORT),
+                crate::check_port(&host, *RENDEZVOUS_PORT),
                 CONNECT_TIMEOUT,
             )
             .await
@@ -1058,6 +1058,16 @@ pub fn is_modifier(evt: &KeyEvent) -> bool {
 }
 
 pub fn check_software_update() {
+    // Injected at compile time via RUSTDESK_DISABLE_UPDATE.
+    // If set to "1" or "true", completely disable software update checks.
+    const DISABLE_UPDATE: bool = matches!(
+        option_env!("RUSTDESK_DISABLE_UPDATE"),
+        Some("1") | Some("true") | Some("TRUE") | Some("True")
+    );
+    if DISABLE_UPDATE {
+        log::info!("Software update check disabled by RUSTDESK_DISABLE_UPDATE (compile-time)");
+        return;
+    }
     if is_custom_client() {
         return;
     }
@@ -1251,6 +1261,13 @@ pub fn is_setup(name: &str) -> bool {
 }
 
 pub fn get_custom_rendezvous_server(custom: String) -> String {
+    // Injected at compile time via RUSTDESK_CUSTOM_SERVER.
+    // If set, overrides the custom-rendezvous-server config option.
+    if let Some(server) = option_env!("RUSTDESK_CUSTOM_SERVER") {
+        if !server.is_empty() {
+            return server.to_owned();
+        }
+    }
     #[cfg(windows)]
     if let Ok(lic) = crate::platform::windows::get_license_from_exe_name() {
         if !lic.host.is_empty() {
@@ -1271,6 +1288,13 @@ pub fn get_api_server(api: String, custom: String) -> String {
     if Config::no_register_device() {
         return "".to_owned();
     }
+    // Injected at compile time via RUSTDESK_API_SERVER.
+    // If set, overrides the api-server config option.
+    let api = if let Some(env_api) = option_env!("RUSTDESK_API_SERVER") {
+        if !env_api.is_empty() { env_api.to_owned() } else { api }
+    } else {
+        api
+    };
     let mut res = get_api_server_(api, custom);
     if res.ends_with('/') {
         res.pop();
@@ -1303,7 +1327,7 @@ fn get_api_server_(api: String, custom: String) -> String {
             } else {
                 s
             };
-            return format!("http://{}:{}", s, config::RENDEZVOUS_PORT - 2);
+            return format!("http://{}:{}", s, *config::RENDEZVOUS_PORT - 2);
         } else {
             return format!("http://{}", s);
         }
@@ -1453,7 +1477,7 @@ fn tcp_proxy_log_target(url: &str) -> String {
 
 #[inline]
 fn get_tcp_proxy_addr() -> String {
-    check_port(Config::get_rendezvous_server(), RENDEZVOUS_PORT)
+    check_port(Config::get_rendezvous_server(), *RENDEZVOUS_PORT)
 }
 
 /// Send an HTTP request via the rendezvous server's TCP proxy using protobuf.
@@ -2171,8 +2195,15 @@ pub async fn get_key(sync: bool) -> String {
         let mut options = crate::ipc::get_options_async().await;
         options.remove("key").unwrap_or_default()
     };
+    // Injected at compile time via RUSTDESK_KEY.
+    // If set, overrides the key config option.
+    if let Some(env_key) = option_env!("RUSTDESK_KEY") {
+        if !env_key.is_empty() {
+            return env_key.to_owned();
+        }
+    }
     if key.is_empty() {
-        key = config::RS_PUB_KEY.to_owned();
+        key = config::RS_PUB_KEY.clone();
     }
     key
 }

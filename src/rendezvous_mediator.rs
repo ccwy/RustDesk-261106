@@ -60,7 +60,7 @@ const MAX_REPORTED_RELAYS: usize = 32;
 const REPORTED_RELAY_TTL: Duration = Duration::from_secs(600);
 
 fn remember_reported_relay(relay_server: &str, now: Instant) {
-    let relay_server = check_port(relay_server, config::RELAY_PORT);
+    let relay_server = check_port(relay_server, *config::RELAY_PORT);
     let mut relays = REPORTED_RELAYS.lock().unwrap();
     relays.retain(|(r, at)| {
         *r != relay_server && now.saturating_duration_since(*at) < REPORTED_RELAY_TTL
@@ -72,7 +72,7 @@ fn remember_reported_relay(relay_server: &str, now: Instant) {
 }
 
 fn is_reported_relay(relay_server: &str, now: Instant) -> bool {
-    let relay_server = check_port(relay_server, config::RELAY_PORT);
+    let relay_server = check_port(relay_server, *config::RELAY_PORT);
     REPORTED_RELAYS.lock().unwrap().iter().any(|(r, at)| {
         *r == relay_server && now.saturating_duration_since(*at) < REPORTED_RELAY_TTL
     })
@@ -405,7 +405,7 @@ impl RendezvousMediator {
     }
 
     pub async fn start_udp(server: ServerPtr, host: String) -> ResultType<()> {
-        let host = check_port(&host, RENDEZVOUS_PORT);
+        let host = check_port(&host, *RENDEZVOUS_PORT);
         log::info!("start udp: {host}");
         let (mut socket, mut addr) = new_udp_for(&host, CONNECT_TIMEOUT).await?;
         let mut rz = Self {
@@ -627,7 +627,7 @@ impl RendezvousMediator {
     }
 
     pub async fn start_tcp(server: ServerPtr, host: String) -> ResultType<()> {
-        let host = check_port(&host, RENDEZVOUS_PORT);
+        let host = check_port(&host, *RENDEZVOUS_PORT);
         log::info!("start tcp: {}", hbb_common::websocket::check_ws(&host));
         let mut conn = connect_tcp(host.clone(), CONNECT_TIMEOUT).await?;
         let key = crate::get_key(true).await;
@@ -1378,8 +1378,8 @@ impl RendezvousMediator {
     fn check_relay_request(&self, rr: &RequestRelay, now: Instant) -> ResultType<()> {
         crate::common::check_relay_uuid(&rr.uuid)?;
         if !is_reported_relay(&rr.relay_server, now)
-            && check_port(&rr.relay_server, config::RELAY_PORT)
-                != check_port(self.get_relay_server(String::new()), config::RELAY_PORT)
+            && check_port(&rr.relay_server, *config::RELAY_PORT)
+                != check_port(self.get_relay_server(String::new()), *config::RELAY_PORT)
         {
             bail!(
                 "relay server {:?} was not offered by this peer",
@@ -1395,7 +1395,7 @@ fn get_direct_port() -> i32 {
         .parse::<i32>()
         .unwrap_or(0);
     if port <= 0 {
-        port = RENDEZVOUS_PORT + 2;
+        port = *RENDEZVOUS_PORT + 2;
     }
     port
 }

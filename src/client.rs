@@ -440,7 +440,7 @@ impl Client {
         if hbb_common::is_ip_str(peer) {
             return Ok((
                 (
-                    connect_tcp_local(check_port(peer, RELAY_PORT + 1), None, CONNECT_TIMEOUT)
+                    connect_tcp_local(check_port(peer, *RELAY_PORT + 1), None, CONNECT_TIMEOUT)
                         .await?,
                     true,
                     None,
@@ -477,15 +477,15 @@ impl Client {
         } else {
             if other_server == PUBLIC_SERVER {
                 (
-                    check_port(RENDEZVOUS_SERVERS[0], RENDEZVOUS_PORT),
-                    RENDEZVOUS_SERVERS[1..]
+                    check_port(RENDEZVOUS_SERVERS[0].as_str(), *RENDEZVOUS_PORT),
+                    &RENDEZVOUS_SERVERS[1..]
                         .iter()
                         .map(|x| x.to_string())
                         .collect(),
                     true,
                 )
             } else {
-                (check_port(other_server, RENDEZVOUS_PORT), Vec::new(), true)
+                (check_port(other_server, *RENDEZVOUS_PORT), Vec::new(), true)
             }
         };
 
@@ -830,7 +830,7 @@ impl Client {
         if socket.is_err() && !servers.is_empty() {
             log::info!("try the other servers: {:?}", servers);
             for server in servers {
-                let server = check_port(server, RENDEZVOUS_PORT);
+                let server = check_port(server, *RENDEZVOUS_PORT);
                 socket = connect_tcp(&*server, CONNECT_TIMEOUT).await;
                 if socket.is_ok() {
                     rendezvous_server = server;
@@ -1659,7 +1659,7 @@ impl Client {
         conn: &mut Stream,
     ) -> ResultType<Option<Vec<u8>>> {
         let rs_pk = get_rs_pk(if key.is_empty() {
-            config::RS_PUB_KEY
+            config::RS_PUB_KEY.as_str()
         } else {
             key
         });
@@ -1862,7 +1862,7 @@ impl Client {
     ) -> ResultType<Stream> {
         crate::common::check_relay_uuid(&uuid)?;
         // The proxy's address family does not constrain the relay target.
-        let relay_server = check_port(relay_server, RELAY_PORT);
+        let relay_server = check_port(relay_server, *RELAY_PORT);
         let use_ws_proxy = Config::is_proxy() && is_ws_endpoint(&check_ws(&relay_server));
         let mut conn = connect_tcp(
             ipv4_to_ipv6(relay_server, ipv4 || use_ws_proxy),
@@ -2925,7 +2925,7 @@ impl LoginConfigHandler {
             let server = server_key.next().unwrap_or_default();
             let args = server_key.next().unwrap_or_default();
             let key = if server == PUBLIC_SERVER {
-                config::RS_PUB_KEY.to_owned()
+                config::RS_PUB_KEY.clone()
             } else {
                 let mut args_map: HashMap<String, &str> = HashMap::new();
                 for arg in args.split('&') {
@@ -5288,7 +5288,7 @@ async fn hc_connection_(
     let mut last_recv_msg = Instant::now();
     let mut keep_alive = crate::DEFAULT_KEEP_ALIVE;
 
-    let host = check_port(&rendezvous_server, RENDEZVOUS_PORT);
+    let host = check_port(&rendezvous_server, *RENDEZVOUS_PORT);
     let mut conn = connect_tcp(host.clone(), CONNECT_TIMEOUT).await?;
     let key = crate::get_key(true).await;
     crate::secure_tcp(&mut conn, &key).await?;
