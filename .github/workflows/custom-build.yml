@@ -1,0 +1,263 @@
+name: Custom Build
+
+# =============================================================================
+# RustDesk 自定义编译 workflow
+#
+# 使用方法：
+# 1. 在仓库 Settings → Secrets and variables → Actions → Variables 中添加变量
+# 2. 在仓库 Settings → Secrets and variables → Actions → Secrets 中添加敏感变量
+# 3. 手动触发此 workflow (Run workflow) 或推送 tag 触发
+#
+# 编译时环境变量说明见 ENV_VARS.md
+# =============================================================================
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Build target"
+        type: choice
+        options:
+          - linux-x64
+          - windows-x64
+          - all
+        default: linux-x64
+  push:
+    tags:
+      - "v*"
+  release:
+    types: [published]
+
+env:
+  RUST_VERSION: "1.75"
+  FLUTTER_VERSION: "3.24.5"
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+
+jobs:
+  # ===========================================================================
+  # Linux x86_64 编译
+  # ===========================================================================
+  build-linux:
+    name: Build Linux x86_64
+    runs-on: ubuntu-22.04
+    if: github.event_name == 'push' || github.event_name == 'release' || inputs.target == 'linux-x64' || inputs.target == 'all'
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            clang \
+            cmake \
+            curl \
+            gcc \
+            git \
+            libgtk-3-dev \
+            libxcb1-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxkbcommon-dev \
+            libxdo-dev \
+            libpango1.0-dev \
+            libglib2.0-dev \
+            libasound2-dev \
+            libpulse-dev \
+            libdbus-1-dev \
+            libxcb-randr0-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            nasm \
+            wget \
+            unzip
+
+      - name: Install RustDesk flutter rust bridge
+        run: |
+          cargo install flutter_rust_bridge_codegen --version 1.80.1 --features "uuid"
+          dart pub global activate ffigen --version 5.0.2
+
+      - name: Generate flutter rust bridge
+        run: |
+          flutter pub get
+          cargo install cargo-expand --version 1.0.95
+          ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/lib/generated_bridge.h
+
+      - name: Build RustDesk (with env var injection)
+        run: |
+          # ===================================================================
+          # 编译时环境变量注入
+          # 这些变量通过 option_env!() 宏在编译时读取，嵌入二进制文件
+          # 从 GitHub 仓库 Variables 和 Secrets 中读取
+          # ===================================================================
+          flutter build linux --release
+        env:
+          # --- 服务器配置 (Variables, 非敏感) ---
+          RUSTDESK_RENDEZVOUS_SERVERS: ${{ vars.RUSTDESK_RENDEZVOUS_SERVERS }}
+          RUSTDESK_CUSTOM_SERVER: ${{ vars.RUSTDESK_CUSTOM_SERVER }}
+          RUSTDESK_API_SERVER: ${{ vars.RUSTDESK_API_SERVER }}
+
+          # --- 端口配置 (Variables) ---
+          RUSTDESK_RENDEZVOUS_PORT: ${{ vars.RUSTDESK_RENDEZVOUS_PORT }}
+          RUSTDESK_RELAY_PORT: ${{ vars.RUSTDESK_RELAY_PORT }}
+          RUSTDESK_WS_RENDEZVOUS_PORT: ${{ vars.RUSTDESK_WS_RENDEZVOUS_PORT }}
+          RUSTDESK_WS_RELAY_PORT: ${{ vars.RUSTDESK_WS_RELAY_PORT }}
+
+          # --- 更新检查配置 (Variables) ---
+          RUSTDESK_DISABLE_UPDATE: ${{ vars.RUSTDESK_DISABLE_UPDATE }}
+          RUSTDESK_UPDATE_URL: ${{ vars.RUSTDESK_UPDATE_URL }}
+
+          # --- 密钥配置 (Secrets, 敏感) ---
+          RUSTDESK_RS_PUB_KEY: ${{ secrets.RUSTDESK_RS_PUB_KEY }}
+          RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
+          RUSTDESK_PRESET_PASSWORD: ${{ secrets.RUSTDESK_PRESET_PASSWORD }}
+
+      - name: Package Linux build
+        run: |
+          cd flutter/build/linux/x64/release/bundle
+          tar czf /tmp/rustdesk-linux-x64.tar.gz .
+          echo "Linux package created at /tmp/rustdesk-linux-x64.tar.gz"
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustdesk-linux-x64
+          path: /tmp/rustdesk-linux-x64.tar.gz
+          retention-days: 30
+
+      - name: Upload to Release (if tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: /tmp/rustdesk-linux-x64.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ===========================================================================
+  # Windows x86_64 编译
+  # ===========================================================================
+  build-windows:
+    name: Build Windows x86_64
+    runs-on: windows-2022
+    if: github.event_name == 'push' || github.event_name == 'release' || inputs.target == 'windows-x64' || inputs.target == 'all'
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: x86_64-pc-windows-msvc
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - name: Install RustDesk flutter rust bridge
+        run: |
+          cargo install flutter_rust_bridge_codegen --version 1.80.1 --features "uuid"
+          dart pub global activate ffigen --version 5.0.2
+
+      - name: Generate flutter rust bridge
+        run: |
+          flutter pub get
+          cargo install cargo-expand --version 1.0.95
+          ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/lib/generated_bridge.h
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkg-json: ./vcpkg.json
+
+      - name: Build RustDesk (with env var injection)
+        run: flutter build windows --release
+        env:
+          # --- 服务器配置 (Variables) ---
+          RUSTDESK_RENDEZVOUS_SERVERS: ${{ vars.RUSTDESK_RENDEZVOUS_SERVERS }}
+          RUSTDESK_CUSTOM_SERVER: ${{ vars.RUSTDESK_CUSTOM_SERVER }}
+          RUSTDESK_API_SERVER: ${{ vars.RUSTDESK_API_SERVER }}
+
+          # --- 端口配置 (Variables) ---
+          RUSTDESK_RENDEZVOUS_PORT: ${{ vars.RUSTDESK_RENDEZVOUS_PORT }}
+          RUSTDESK_RELAY_PORT: ${{ vars.RUSTDESK_RELAY_PORT }}
+          RUSTDESK_WS_RENDEZVOUS_PORT: ${{ vars.RUSTDESK_WS_RENDEZVOUS_PORT }}
+          RUSTDESK_WS_RELAY_PORT: ${{ vars.RUSTDESK_WS_RELAY_PORT }}
+
+          # --- 更新检查配置 (Variables) ---
+          RUSTDESK_DISABLE_UPDATE: ${{ vars.RUSTDESK_DISABLE_UPDATE }}
+          RUSTDESK_UPDATE_URL: ${{ vars.RUSTDESK_UPDATE_URL }}
+
+          # --- 密钥配置 (Secrets) ---
+          RUSTDESK_RS_PUB_KEY: ${{ secrets.RUSTDESK_RS_PUB_KEY }}
+          RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
+          RUSTDESK_PRESET_PASSWORD: ${{ secrets.RUSTDESK_PRESET_PASSWORD }}
+
+          VCPKG_ROOT: ${{ steps.setup-vcpkg.outputs.vcpkg-path }}
+
+      - name: Package Windows build
+        run: |
+          Compress-Archive -Path flutter\build\windows\x64\runner\Release\* -DestinationPath rustdesk-windows-x64.zip
+          echo "Windows package created"
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustdesk-windows-x64
+          path: rustdesk-windows-x64.zip
+          retention-days: 30
+
+      - name: Upload to Release (if tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: rustdesk-windows-x64.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ===========================================================================
+  # 输出编译配置摘要
+  # ===========================================================================
+  config-summary:
+    name: Build Configuration Summary
+    runs-on: ubuntu-latest
+    steps:
+      - name: Show configuration
+        run: |
+          echo "============================================"
+          echo "  RustDesk Custom Build Configuration"
+          echo "============================================"
+          echo ""
+          echo "--- Server Configuration ---"
+          echo "  RENDEZVOUS_SERVERS: ${{ vars.RUSTDESK_RENDEZVOUS_SERVERS == '' && '(default: rs-ny.rustdesk.com)' || vars.RUSTDESK_RENDEZVOUS_SERVERS }}"
+          echo "  CUSTOM_SERVER:     ${{ vars.RUSTDESK_CUSTOM_SERVER == '' && '(not set)' || vars.RUSTDESK_CUSTOM_SERVER }}"
+          echo "  API_SERVER:        ${{ vars.RUSTDESK_API_SERVER == '' && '(derived from config)' || vars.RUSTDESK_API_SERVER }}"
+          echo ""
+          echo "--- Port Configuration ---"
+          echo "  RENDEZVOUS_PORT:   ${{ vars.RUSTDESK_RENDEZVOUS_PORT == '' && '(default: 21116)' || vars.RUSTDESK_RENDEZVOUS_PORT }}"
+          echo "  RELAY_PORT:        ${{ vars.RUSTDESK_RELAY_PORT == '' && '(default: 21117)' || vars.RUSTDESK_RELAY_PORT }}"
+          echo "  WS_RENDEZVOUS_PORT: ${{ vars.RUSTDESK_WS_RENDEZVOUS_PORT == '' && '(default: 21118)' || vars.RUSTDESK_WS_RENDEZVOUS_PORT }}"
+          echo "  WS_RELAY_PORT:     ${{ vars.RUSTDESK_WS_RELAY_PORT == '' && '(default: 21119)' || vars.RUSTDESK_WS_RELAY_PORT }}"
+          echo ""
+          echo "--- Update Check ---"
+          echo "  DISABLE_UPDATE:    ${{ vars.RUSTDESK_DISABLE_UPDATE == '' && '(not disabled)' || vars.RUSTDESK_DISABLE_UPDATE }}"
+          echo "  UPDATE_URL:        ${{ vars.RUSTDESK_UPDATE_URL == '' && '(default: api.rustdesk.com)' || vars.RUSTDESK_UPDATE_URL }}"
+          echo ""
+          echo "--- Secrets (values hidden) ---"
+          echo "  RS_PUB_KEY:        ${{ secrets.RUSTDESK_RS_PUB_KEY == '' && '(not set, using default)' || '(set)' }}"
+          echo "  KEY:               ${{ secrets.RUSTDESK_KEY == '' && '(not set)' || '(set)' }}"
+          echo "  PRESET_PASSWORD:   ${{ secrets.RUSTDESK_PRESET_PASSWORD == '' && '(not set)' || '(set)' }}"
+          echo ""
+          echo "============================================"
