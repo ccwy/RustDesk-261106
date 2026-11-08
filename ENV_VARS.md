@@ -9,32 +9,42 @@
 - `check_update()` / `check_update_as_root()` 直接 return
 - 更新检查 URL 硬编码为 `https://0.0.0.0/no-update`（不存在的地址）
 
-## 可配置的环境变量（共 8 个）
+## 可配置的环境变量（共 6 个）
 
 在仓库 **Settings → Secrets and variables → Actions → Secrets** 中添加：
-
-### 服务器相关
 
 | Secret Name | 用途 | 默认值 |
 |---|---|---|
 | `RUSTDESK_RENDEZVOUS_SERVERS` | 会合服务器地址（逗号分隔多个） | `rs-ny.rustdesk.com` |
-| `RUSTDESK_API_SERVER` | API 服务器地址 | 从配置推导 |
-
-### 端口相关
-
-| Secret Name | 用途 | 默认值 |
-|---|---|---|
+| `RUSTDESK_API_SERVER` | API 服务器地址 | 从会合服务器推导 |
 | `RUSTDESK_RENDEZVOUS_PORT` | 会合服务器端口 | `21116` |
 | `RUSTDESK_RELAY_PORT` | 中继服务器端口 | `21117` |
-| `RUSTDESK_WS_RENDEZVOUS_PORT` | WebSocket 会合端口 | `21118` |
-| `RUSTDESK_WS_RELAY_PORT` | WebSocket 中继端口 | `21119` |
-
-### 密钥与密码
-
-| Secret Name | 用途 | 默认值 |
-|---|---|---|
 | `RUSTDESK_RS_PUB_KEY` | 服务器公钥（base64 编码） | RustDesk 官方公钥 |
 | `RUSTDESK_PRESET_PASSWORD` | 预设永久密码（明文） | 无 |
+
+## 端口自动推导
+
+只需设置 `RENDEZVOUS_PORT` 和 `RELAY_PORT`，其余端口自动推导：
+
+| 端口 | 计算方式 | 用途 |
+|---|---|---|
+| `RENDEZVOUS_PORT - 2` | 21114 | API 服务器 (hbbs HTTP API) |
+| `RENDEZVOUS_PORT - 1` | 21115 | NAT 测试端口 |
+| `RENDEZVOUS_PORT` | 21116 | 会合服务器主端口 (hbbs，打洞) |
+| `RELAY_PORT` | 21117 | 中继服务器 (hbbt，转发) |
+| `RENDEZVOUS_PORT + 2` | 21118 | WebSocket 会合端口 |
+| `RENDEZVOUS_PORT + 3` | 21119 | WebSocket 中继端口 |
+
+例如把 `RENDEZVOUS_PORT` 设为 `30016`、`RELAY_PORT` 设为 `30017`，则端口变为：
+
+```
+30014 = API
+30015 = NAT 测试
+30016 = 会合
+30017 = 中继
+30018 = WS 会合
+30019 = WS 中继
+```
 
 ## GitHub Actions 使用
 
@@ -58,3 +68,5 @@
 | `RUSTDESK_UPDATE_URL` | URL 已硬编码为不存在的地址 |
 | `RUSTDESK_KEY` | 与 `RUSTDESK_RS_PUB_KEY` 重复，不设时自动回退到 RS_PUB_KEY |
 | `RUSTDESK_CUSTOM_SERVER` | 与 `RUSTDESK_RENDEZVOUS_SERVERS` 重复，设了默认服务器即可 |
+| `RUSTDESK_WS_RENDEZVOUS_PORT` | 代码未使用，实际用 `RENDEZVOUS_PORT + 2` 自动推导 |
+| `RUSTDESK_WS_RELAY_PORT` | 代码未使用，实际用 `RENDEZVOUS_PORT + 3` 自动推导 |

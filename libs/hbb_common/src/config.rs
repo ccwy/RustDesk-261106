@@ -140,18 +140,6 @@ lazy_static::lazy_static! {
             .and_then(|s| s.parse().ok())
             .unwrap_or(21117)
     };
-    /// WebSocket rendezvous port. Injected at compile time via RUSTDESK_WS_RENDEZVOUS_PORT.
-    pub static ref WS_RENDEZVOUS_PORT: i32 = {
-        option_env!("RUSTDESK_WS_RENDEZVOUS_PORT")
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(21118)
-    };
-    /// WebSocket relay port. Injected at compile time via RUSTDESK_WS_RELAY_PORT.
-    pub static ref WS_RELAY_PORT: i32 = {
-        option_env!("RUSTDESK_WS_RELAY_PORT")
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(21119)
-    };
 }
 
 #[inline]
