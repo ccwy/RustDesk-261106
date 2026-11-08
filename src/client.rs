@@ -478,7 +478,7 @@ impl Client {
             if other_server == PUBLIC_SERVER {
                 (
                     check_port(RENDEZVOUS_SERVERS[0].as_str(), *RENDEZVOUS_PORT),
-                    &RENDEZVOUS_SERVERS[1..]
+                    RENDEZVOUS_SERVERS[1..]
                         .iter()
                         .map(|x| x.to_string())
                         .collect(),
