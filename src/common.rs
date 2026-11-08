@@ -1247,13 +1247,6 @@ pub fn is_setup(name: &str) -> bool {
 }
 
 pub fn get_custom_rendezvous_server(custom: String) -> String {
-    // Injected at compile time via RUSTDESK_CUSTOM_SERVER.
-    // If set, overrides the custom-rendezvous-server config option.
-    if let Some(server) = option_env!("RUSTDESK_CUSTOM_SERVER") {
-        if !server.is_empty() {
-            return server.to_owned();
-        }
-    }
     #[cfg(windows)]
     if let Ok(lic) = crate::platform::windows::get_license_from_exe_name() {
         if !lic.host.is_empty() {

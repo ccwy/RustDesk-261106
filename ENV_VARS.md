@@ -9,7 +9,7 @@
 - `check_update()` / `check_update_as_root()` 直接 return
 - 更新检查 URL 硬编码为 `https://0.0.0.0/no-update`（不存在的地址）
 
-## 可配置的环境变量（共 9 个）
+## 可配置的环境变量（共 8 个）
 
 在仓库 **Settings → Secrets and variables → Actions → Secrets** 中添加：
 
@@ -18,7 +18,6 @@
 | Secret Name | 用途 | 默认值 |
 |---|---|---|
 | `RUSTDESK_RENDEZVOUS_SERVERS` | 会合服务器地址（逗号分隔多个） | `rs-ny.rustdesk.com` |
-| `RUSTDESK_CUSTOM_SERVER` | 自定义中继服务器地址 | 无 |
 | `RUSTDESK_API_SERVER` | API 服务器地址 | 从配置推导 |
 
 ### 端口相关
@@ -58,3 +57,4 @@
 | `RUSTDESK_DISABLE_UPDATE` | 更新已永久禁用，无需开关 |
 | `RUSTDESK_UPDATE_URL` | URL 已硬编码为不存在的地址 |
 | `RUSTDESK_KEY` | 与 `RUSTDESK_RS_PUB_KEY` 重复，不设时自动回退到 RS_PUB_KEY |
+| `RUSTDESK_CUSTOM_SERVER` | 与 `RUSTDESK_RENDEZVOUS_SERVERS` 重复，设了默认服务器即可 |

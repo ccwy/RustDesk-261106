@@ -105,7 +105,6 @@ jobs:
           echo ""
           echo "--- Server Configuration (from Secrets) ---"
           if [ -n "${{ secrets.RUSTDESK_RENDEZVOUS_SERVERS }}" ]; then echo "  RENDEZVOUS_SERVERS: (set)"; else echo "  RENDEZVOUS_SERVERS: (default: rs-ny.rustdesk.com)"; fi
-          if [ -n "${{ secrets.RUSTDESK_CUSTOM_SERVER }}" ]; then echo "  CUSTOM_SERVER: (set)"; else echo "  CUSTOM_SERVER: (not set)"; fi
           if [ -n "${{ secrets.RUSTDESK_API_SERVER }}" ]; then echo "  API_SERVER: (set)"; else echo "  API_SERVER: (derived)"; fi
           echo ""
           echo "--- Ports ---"
@@ -208,7 +207,6 @@ jobs:
         run: flutter build linux --release
         env:
           RUSTDESK_RENDEZVOUS_SERVERS: ${{ secrets.RUSTDESK_RENDEZVOUS_SERVERS }}
-          RUSTDESK_CUSTOM_SERVER: ${{ secrets.RUSTDESK_CUSTOM_SERVER }}
           RUSTDESK_API_SERVER: ${{ secrets.RUSTDESK_API_SERVER }}
           RUSTDESK_RENDEZVOUS_PORT: ${{ secrets.RUSTDESK_RENDEZVOUS_PORT }}
           RUSTDESK_RELAY_PORT: ${{ secrets.RUSTDESK_RELAY_PORT }}
@@ -318,7 +316,6 @@ jobs:
         run: flutter build windows --release
         env:
           RUSTDESK_RENDEZVOUS_SERVERS: ${{ secrets.RUSTDESK_RENDEZVOUS_SERVERS }}
-          RUSTDESK_CUSTOM_SERVER: ${{ secrets.RUSTDESK_CUSTOM_SERVER }}
           RUSTDESK_API_SERVER: ${{ secrets.RUSTDESK_API_SERVER }}
           RUSTDESK_RENDEZVOUS_PORT: ${{ secrets.RUSTDESK_RENDEZVOUS_PORT }}
           RUSTDESK_RELAY_PORT: ${{ secrets.RUSTDESK_RELAY_PORT }}
