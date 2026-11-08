@@ -4,10 +4,10 @@ name: Custom Build
 # RustDesk 自定义编译 workflow
 #
 # 使用方法：
-# 1. 在仓库 Settings → Secrets and variables → Actions → Variables 中添加变量
-# 2. 在仓库 Settings → Secrets and variables → Actions → Secrets 中添加敏感变量
-# 3. 手动触发此 workflow (Run workflow) 或推送 tag 触发
+# 1. 在仓库 Settings → Secrets and variables → Actions → Secrets 中添加所有变量
+# 2. 手动触发此 workflow (Run workflow) 或推送 tag 触发
 #
+# 所有配置统一使用 Actions Secrets，编译时通过 option_env!() 注入二进制文件
 # 编译时环境变量说明见 ENV_VARS.md
 # =============================================================================
 
@@ -35,10 +35,47 @@ env:
 
 jobs:
   # ===========================================================================
+  # 编译前输出配置摘要（Secrets 值不显示，只显示是否已设置）
+  # ===========================================================================
+  config-summary:
+    name: Build Configuration Summary
+    runs-on: ubuntu-latest
+    steps:
+      - name: Show configuration
+        run: |
+          echo "============================================"
+          echo "  RustDesk Custom Build Configuration"
+          echo "  (all values from Actions Secrets)"
+          echo "============================================"
+          echo ""
+          echo "--- Server Configuration ---"
+          if [ -n "${{ secrets.RUSTDESK_RENDEZVOUS_SERVERS }}" ]; then echo "  RENDEZVOUS_SERVERS: (set)"; else echo "  RENDEZVOUS_SERVERS: (not set, default: rs-ny.rustdesk.com)"; fi
+          if [ -n "${{ secrets.RUSTDESK_CUSTOM_SERVER }}" ]; then echo "  CUSTOM_SERVER: (set)"; else echo "  CUSTOM_SERVER: (not set)"; fi
+          if [ -n "${{ secrets.RUSTDESK_API_SERVER }}" ]; then echo "  API_SERVER: (set)"; else echo "  API_SERVER: (not set, derived from config)"; fi
+          echo ""
+          echo "--- Port Configuration ---"
+          if [ -n "${{ secrets.RUSTDESK_RENDEZVOUS_PORT }}" ]; then echo "  RENDEZVOUS_PORT: (set)"; else echo "  RENDEZVOUS_PORT: (not set, default: 21116)"; fi
+          if [ -n "${{ secrets.RUSTDESK_RELAY_PORT }}" ]; then echo "  RELAY_PORT: (set)"; else echo "  RELAY_PORT: (not set, default: 21117)"; fi
+          if [ -n "${{ secrets.RUSTDESK_WS_RENDEZVOUS_PORT }}" ]; then echo "  WS_RENDEZVOUS_PORT: (set)"; else echo "  WS_RENDEZVOUS_PORT: (not set, default: 21118)"; fi
+          if [ -n "${{ secrets.RUSTDESK_WS_RELAY_PORT }}" ]; then echo "  WS_RELAY_PORT: (set)"; else echo "  WS_RELAY_PORT: (not set, default: 21119)"; fi
+          echo ""
+          echo "--- Update Check ---"
+          if [ -n "${{ secrets.RUSTDESK_DISABLE_UPDATE }}" ]; then echo "  DISABLE_UPDATE: (set)"; else echo "  DISABLE_UPDATE: (not set, updates enabled)"; fi
+          if [ -n "${{ secrets.RUSTDESK_UPDATE_URL }}" ]; then echo "  UPDATE_URL: (set)"; else echo "  UPDATE_URL: (not set, default: api.rustdesk.com)"; fi
+          echo ""
+          echo "--- Keys & Password ---"
+          if [ -n "${{ secrets.RUSTDESK_RS_PUB_KEY }}" ]; then echo "  RS_PUB_KEY: (set)"; else echo "  RS_PUB_KEY: (not set, using default official key)"; fi
+          if [ -n "${{ secrets.RUSTDESK_KEY }}" ]; then echo "  KEY: (set)"; else echo "  KEY: (not set)"; fi
+          if [ -n "${{ secrets.RUSTDESK_PRESET_PASSWORD }}" ]; then echo "  PRESET_PASSWORD: (set)"; else echo "  PRESET_PASSWORD: (not set)"; fi
+          echo ""
+          echo "============================================"
+
+  # ===========================================================================
   # Linux x86_64 编译
   # ===========================================================================
   build-linux:
     name: Build Linux x86_64
+    needs: config-summary
     runs-on: ubuntu-22.04
     if: github.event_name == 'push' || github.event_name == 'release' || inputs.target == 'linux-x64' || inputs.target == 'all'
     steps:
@@ -94,31 +131,19 @@ jobs:
           cargo install cargo-expand --version 1.0.95
           ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/lib/generated_bridge.h
 
-      - name: Build RustDesk (with env var injection)
-        run: |
-          # ===================================================================
-          # 编译时环境变量注入
-          # 这些变量通过 option_env!() 宏在编译时读取，嵌入二进制文件
-          # 从 GitHub 仓库 Variables 和 Secrets 中读取
-          # ===================================================================
-          flutter build linux --release
+      - name: Build RustDesk (with env var injection from Secrets)
+        run: flutter build linux --release
         env:
-          # --- 服务器配置 (Variables, 非敏感) ---
-          RUSTDESK_RENDEZVOUS_SERVERS: ${{ vars.RUSTDESK_RENDEZVOUS_SERVERS }}
-          RUSTDESK_CUSTOM_SERVER: ${{ vars.RUSTDESK_CUSTOM_SERVER }}
-          RUSTDESK_API_SERVER: ${{ vars.RUSTDESK_API_SERVER }}
-
-          # --- 端口配置 (Variables) ---
-          RUSTDESK_RENDEZVOUS_PORT: ${{ vars.RUSTDESK_RENDEZVOUS_PORT }}
-          RUSTDESK_RELAY_PORT: ${{ vars.RUSTDESK_RELAY_PORT }}
-          RUSTDESK_WS_RENDEZVOUS_PORT: ${{ vars.RUSTDESK_WS_RENDEZVOUS_PORT }}
-          RUSTDESK_WS_RELAY_PORT: ${{ vars.RUSTDESK_WS_RELAY_PORT }}
-
-          # --- 更新检查配置 (Variables) ---
-          RUSTDESK_DISABLE_UPDATE: ${{ vars.RUSTDESK_DISABLE_UPDATE }}
-          RUSTDESK_UPDATE_URL: ${{ vars.RUSTDESK_UPDATE_URL }}
-
-          # --- 密钥配置 (Secrets, 敏感) ---
+          # === 所有配置统一从 Actions Secrets 读取 ===
+          RUSTDESK_RENDEZVOUS_SERVERS: ${{ secrets.RUSTDESK_RENDEZVOUS_SERVERS }}
+          RUSTDESK_CUSTOM_SERVER: ${{ secrets.RUSTDESK_CUSTOM_SERVER }}
+          RUSTDESK_API_SERVER: ${{ secrets.RUSTDESK_API_SERVER }}
+          RUSTDESK_RENDEZVOUS_PORT: ${{ secrets.RUSTDESK_RENDEZVOUS_PORT }}
+          RUSTDESK_RELAY_PORT: ${{ secrets.RUSTDESK_RELAY_PORT }}
+          RUSTDESK_WS_RENDEZVOUS_PORT: ${{ secrets.RUSTDESK_WS_RENDEZVOUS_PORT }}
+          RUSTDESK_WS_RELAY_PORT: ${{ secrets.RUSTDESK_WS_RELAY_PORT }}
+          RUSTDESK_DISABLE_UPDATE: ${{ secrets.RUSTDESK_DISABLE_UPDATE }}
+          RUSTDESK_UPDATE_URL: ${{ secrets.RUSTDESK_UPDATE_URL }}
           RUSTDESK_RS_PUB_KEY: ${{ secrets.RUSTDESK_RS_PUB_KEY }}
           RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
           RUSTDESK_PRESET_PASSWORD: ${{ secrets.RUSTDESK_PRESET_PASSWORD }}
@@ -149,6 +174,7 @@ jobs:
   # ===========================================================================
   build-windows:
     name: Build Windows x86_64
+    needs: config-summary
     runs-on: windows-2022
     if: github.event_name == 'push' || github.event_name == 'release' || inputs.target == 'windows-x64' || inputs.target == 'all'
     steps:
@@ -182,29 +208,22 @@ jobs:
         with:
           vcpkg-json: ./vcpkg.json
 
-      - name: Build RustDesk (with env var injection)
+      - name: Build RustDesk (with env var injection from Secrets)
         run: flutter build windows --release
         env:
-          # --- 服务器配置 (Variables) ---
-          RUSTDESK_RENDEZVOUS_SERVERS: ${{ vars.RUSTDESK_RENDEZVOUS_SERVERS }}
-          RUSTDESK_CUSTOM_SERVER: ${{ vars.RUSTDESK_CUSTOM_SERVER }}
-          RUSTDESK_API_SERVER: ${{ vars.RUSTDESK_API_SERVER }}
-
-          # --- 端口配置 (Variables) ---
-          RUSTDESK_RENDEZVOUS_PORT: ${{ vars.RUSTDESK_RENDEZVOUS_PORT }}
-          RUSTDESK_RELAY_PORT: ${{ vars.RUSTDESK_RELAY_PORT }}
-          RUSTDESK_WS_RENDEZVOUS_PORT: ${{ vars.RUSTDESK_WS_RENDEZVOUS_PORT }}
-          RUSTDESK_WS_RELAY_PORT: ${{ vars.RUSTDESK_WS_RELAY_PORT }}
-
-          # --- 更新检查配置 (Variables) ---
-          RUSTDESK_DISABLE_UPDATE: ${{ vars.RUSTDESK_DISABLE_UPDATE }}
-          RUSTDESK_UPDATE_URL: ${{ vars.RUSTDESK_UPDATE_URL }}
-
-          # --- 密钥配置 (Secrets) ---
+          # === 所有配置统一从 Actions Secrets 读取 ===
+          RUSTDESK_RENDEZVOUS_SERVERS: ${{ secrets.RUSTDESK_RENDEZVOUS_SERVERS }}
+          RUSTDESK_CUSTOM_SERVER: ${{ secrets.RUSTDESK_CUSTOM_SERVER }}
+          RUSTDESK_API_SERVER: ${{ secrets.RUSTDESK_API_SERVER }}
+          RUSTDESK_RENDEZVOUS_PORT: ${{ secrets.RUSTDESK_RENDEZVOUS_PORT }}
+          RUSTDESK_RELAY_PORT: ${{ secrets.RUSTDESK_RELAY_PORT }}
+          RUSTDESK_WS_RENDEZVOUS_PORT: ${{ secrets.RUSTDESK_WS_RENDEZVOUS_PORT }}
+          RUSTDESK_WS_RELAY_PORT: ${{ secrets.RUSTDESK_WS_RELAY_PORT }}
+          RUSTDESK_DISABLE_UPDATE: ${{ secrets.RUSTDESK_DISABLE_UPDATE }}
+          RUSTDESK_UPDATE_URL: ${{ secrets.RUSTDESK_UPDATE_URL }}
           RUSTDESK_RS_PUB_KEY: ${{ secrets.RUSTDESK_RS_PUB_KEY }}
           RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
           RUSTDESK_PRESET_PASSWORD: ${{ secrets.RUSTDESK_PRESET_PASSWORD }}
-
           VCPKG_ROOT: ${{ steps.setup-vcpkg.outputs.vcpkg-path }}
 
       - name: Package Windows build
@@ -226,38 +245,3 @@ jobs:
           files: rustdesk-windows-x64.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # ===========================================================================
-  # 输出编译配置摘要
-  # ===========================================================================
-  config-summary:
-    name: Build Configuration Summary
-    runs-on: ubuntu-latest
-    steps:
-      - name: Show configuration
-        run: |
-          echo "============================================"
-          echo "  RustDesk Custom Build Configuration"
-          echo "============================================"
-          echo ""
-          echo "--- Server Configuration ---"
-          echo "  RENDEZVOUS_SERVERS: ${{ vars.RUSTDESK_RENDEZVOUS_SERVERS == '' && '(default: rs-ny.rustdesk.com)' || vars.RUSTDESK_RENDEZVOUS_SERVERS }}"
-          echo "  CUSTOM_SERVER:     ${{ vars.RUSTDESK_CUSTOM_SERVER == '' && '(not set)' || vars.RUSTDESK_CUSTOM_SERVER }}"
-          echo "  API_SERVER:        ${{ vars.RUSTDESK_API_SERVER == '' && '(derived from config)' || vars.RUSTDESK_API_SERVER }}"
-          echo ""
-          echo "--- Port Configuration ---"
-          echo "  RENDEZVOUS_PORT:   ${{ vars.RUSTDESK_RENDEZVOUS_PORT == '' && '(default: 21116)' || vars.RUSTDESK_RENDEZVOUS_PORT }}"
-          echo "  RELAY_PORT:        ${{ vars.RUSTDESK_RELAY_PORT == '' && '(default: 21117)' || vars.RUSTDESK_RELAY_PORT }}"
-          echo "  WS_RENDEZVOUS_PORT: ${{ vars.RUSTDESK_WS_RENDEZVOUS_PORT == '' && '(default: 21118)' || vars.RUSTDESK_WS_RENDEZVOUS_PORT }}"
-          echo "  WS_RELAY_PORT:     ${{ vars.RUSTDESK_WS_RELAY_PORT == '' && '(default: 21119)' || vars.RUSTDESK_WS_RELAY_PORT }}"
-          echo ""
-          echo "--- Update Check ---"
-          echo "  DISABLE_UPDATE:    ${{ vars.RUSTDESK_DISABLE_UPDATE == '' && '(not disabled)' || vars.RUSTDESK_DISABLE_UPDATE }}"
-          echo "  UPDATE_URL:        ${{ vars.RUSTDESK_UPDATE_URL == '' && '(default: api.rustdesk.com)' || vars.RUSTDESK_UPDATE_URL }}"
-          echo ""
-          echo "--- Secrets (values hidden) ---"
-          echo "  RS_PUB_KEY:        ${{ secrets.RUSTDESK_RS_PUB_KEY == '' && '(not set, using default)' || '(set)' }}"
-          echo "  KEY:               ${{ secrets.RUSTDESK_KEY == '' && '(not set)' || '(set)' }}"
-          echo "  PRESET_PASSWORD:   ${{ secrets.RUSTDESK_PRESET_PASSWORD == '' && '(not set)' || '(set)' }}"
-          echo ""
-          echo "============================================"
