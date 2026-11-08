@@ -4,13 +4,15 @@ RustDesk v1.5.1 自定义编译版本，支持通过 GitHub Actions Secrets 在�
 
 ## 支持的平台
 
+直接使用原版 RustDesk 的 `flutter-build.yml` 构建流程，支持全平台：
+
 | 平台 | 产物 | 说明 |
 |---|---|---|
-| Windows x64 | `.zip` | Windows 7/10/11 (x86_64) |
+| Windows x64 | `.exe` / `.msi` | Windows 7/10/11 |
 | macOS x86_64 | `.dmg` | Intel Mac |
 | macOS aarch64 | `.dmg` | Apple Silicon (M1/M2/M3) |
-| Android arm64 | `.apk` | 绝大多数 Android 手机 |
-| Linux x64 | `.tar.gz` | Linux (x86_64) |
+| Android arm64/v7/x64 | `.apk` | 分架构 + universal APK |
+| Linux x64 | `.deb` / `.appimage` | 多种格式 |
 
 ## 快速开始
 
@@ -44,17 +46,6 @@ RustDesk v1.5.1 自定义编译版本，支持通过 GitHub Actions Secrets 在�
 | `RENDEZVOUS_PORT + 2` | 21118 | WebSocket 会合端口 |
 | `RENDEZVOUS_PORT + 3` | 21119 | WebSocket 中继端口 |
 
-例如把 `RENDEZVOUS_PORT` 设为 `30016`、`RELAY_PORT` 设为 `30017`：
-
-```
-30014 = API
-30015 = NAT 测试
-30016 = 会合
-30017 = 中继
-30018 = WS 会合
-30019 = WS 中继
-```
-
 ### 3. 更新检查
 
 更新检查已**永久禁用**，无需配置：
@@ -65,29 +56,17 @@ RustDesk v1.5.1 自定义编译版本，支持通过 GitHub Actions Secrets 在�
 
 打开 https://github.com/ccwy/RustDesk-261106/actions
 
-1. 左侧选择 **Custom Build**
+1. 左侧选择 **Build the flutter version of the RustDesk**
 2. 点击 **Run workflow**
 3. 填入版本号（如 `1.5.1`）
-4. 选择目标平台：
-   - `all` — 全平台编译（Windows + macOS + Android + Linux）
-   - `windows-x64` — 仅 Windows
-   - `macos` — 仅 macOS (Intel + Apple Silicon)
-   - `android-arm64` — 仅 Android arm64
-   - `linux-x64` — 仅 Linux
+4. 填入 Release tag name（如 `custom`）
 5. 点击绿色 **Run workflow** 按钮
+
+所有平台会并行编译，产物上传到 Artifacts 和 GitHub Release。
 
 ### 5. 下载编译产物
 
 编译完成后，在运行记录的 **Artifacts** 区域下载，或从 GitHub Release 页面下载。
-
-产物命名规则：
-```
-rustdesk-{版本号}-windows-x64.zip
-rustdesk-{版本号}-macos-x86_64.dmg
-rustdesk-{版本号}-macos-aarch64.dmg
-rustdesk-{版本号}-android-arm64.apk
-rustdesk-{版本号}-linux-x64.tar.gz
-```
 
 ## 环境变量完整说明
 
@@ -113,9 +92,9 @@ rustdesk-{版本号}-linux-x64.tar.gz
 ```
 GitHub 仓库 Secrets
         ↓
-GitHub Actions workflow (custom-build.yml)
-        ↓  env: secrets.* 传入
-flutter build / cargo ndk / build.py
+GitHub Actions workflow (flutter-build.yml)
+        ↓  env: secrets.* 传入 (workflow 级别，所有 job 继承)
+cargo build / flutter build / build.py
         ↓  option_env!() 编译时读取
 编译后的二进制文件（配置已嵌入）
 ```

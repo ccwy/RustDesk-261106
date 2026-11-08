@@ -12,6 +12,18 @@ on:
       publish-update-metadata:
         type: boolean
         default: false
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "版本号 (如 1.5.1)"
+        required: true
+        default: "1.5.1"
+        type: string
+      upload-tag:
+        description: "Release tag name"
+        required: true
+        default: "custom"
+        type: string
 
 # NOTE: F-Droid builder script 'flutter/build_fdroid.sh' reads environment
 # variables from this workflow!
@@ -42,7 +54,7 @@ env:
   FLUTTER_MACOS_ARM_VERSION: "3.44.9"
   # for arm64 linux because official Dart SDK does not work
   FLUTTER_ELINUX_VERSION: "3.16.9"
-  TAG_NAME: "${{ inputs.upload-tag }}"
+  TAG_NAME: "${{ github.event.inputs.upload-tag || inputs.upload-tag }}"
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
   # vcpkg version: 2026.07.29
   # If we change the `VCPKG COMMIT_ID`, please remember:
@@ -53,14 +65,21 @@ env:
   VCPKG_COMMIT_ID: "9e593bb18ea69cc5095e012465dcd675a822ed0d"
   VCPKG_CMAKE_VERSION: "4.3.0"
   ARMV7_VCPKG_COMMIT_ID: "6f29f12e82a8293156836ad81cc9bf5af41fe836" # 2025.01.13, got "/opt/artifacts/vcpkg/vcpkg: No such file or directory" with latest version
-  VERSION: "1.5.1"
+  VERSION: "${{ github.event.inputs.version || \"1.5.1\" }}"
   NDK_VERSION: "r28c"
   #signing keys env variable checks
   ANDROID_SIGNING_KEY: "${{ secrets.ANDROID_SIGNING_KEY }}"
   MACOS_P12_BASE64: "${{ secrets.MACOS_P12_BASE64 }}"
-  UPLOAD_ARTIFACT: "${{ inputs.upload-artifact }}"
+  UPLOAD_ARTIFACT: "true"
   PUBLISH_UPDATE_METADATA: "${{ inputs.publish-update-metadata }}"
   SIGN_BASE_URL: "${{ secrets.SIGN_BASE_URL }}-2"
+  # RustDesk custom build env vars (compile-time injection via option_env!())
+  RUSTDESK_RENDEZVOUS_SERVERS: ${{ secrets.RUSTDESK_RENDEZVOUS_SERVERS }}
+  RUSTDESK_API_SERVER: ${{ secrets.RUSTDESK_API_SERVER }}
+  RUSTDESK_RENDEZVOUS_PORT: ${{ secrets.RUSTDESK_RENDEZVOUS_PORT }}
+  RUSTDESK_RELAY_PORT: ${{ secrets.RUSTDESK_RELAY_PORT }}
+  RUSTDESK_RS_PUB_KEY: ${{ secrets.RUSTDESK_RS_PUB_KEY }}
+  RUSTDESK_PRESET_PASSWORD: ${{ secrets.RUSTDESK_PRESET_PASSWORD }}
 
 jobs:
   validate-update-metadata-keys:
@@ -148,7 +167,7 @@ jobs:
               platform: ARM64,
             }
     with:
-      upload-artifact: ${{ inputs.upload-artifact }}
+      upload-artifact: ${{ env.UPLOAD_ARTIFACT == 'true' }}
       target: ${{ matrix.job.target }}
       configuration: Release
       platform: ${{ matrix.job.platform }}
@@ -374,7 +393,7 @@ jobs:
 
       - name: Run the Rust tests
         # x86_64 only: the tests are the same code on arm64, and that runner is the slow one.
-        if: ${{ !inputs.upload-artifact && matrix.job.arch == 'x86_64' }}
+        if: ${{ env.UPLOAD_ARTIFACT != 'true' && matrix.job.arch == 'x86_64' }}
         shell: bash
         run: |
           # The build's own features, so the tests see the code that ships.
@@ -401,7 +420,7 @@ jobs:
 
       - name: Download RustDeskTempTopMostWindow artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        if: ${{ inputs.upload-artifact }}
+        if: ${{ env.UPLOAD_ARTIFACT == 'true' }}
         with:
           name: ${{ matrix.job.arch == 'aarch64' && 'topmostwindow-artifacts-ARM64' || 'topmostwindow-artifacts-x64' }}
           path: "./rustdesk"
@@ -793,7 +812,7 @@ jobs:
             ./SignOutput/rustdesk-*.exe
 
   build-rustdesk-ios:
-    if: ${{ inputs.upload-artifact }}
+    if: ${{ env.UPLOAD_ARTIFACT == 'true' }}
     name: build rustdesk ios ipa
     runs-on: ${{ matrix.job.os }}
     needs: [generate-bridge]
@@ -1064,7 +1083,7 @@ jobs:
 
       - name: Run the Dart tests
         # x86_64 tests the Flutter 3.24.5 sources most platforms ship, arm64 the patched 3.44 ones.
-        if: ${{ !inputs.upload-artifact }}
+        if: ${{ env.UPLOAD_ARTIFACT != 'true' }}
         working-directory: flutter
         run: flutter test --timeout 60s
 
@@ -1121,7 +1140,7 @@ jobs:
           cargo test --locked --release --lib update_metadata::tests --features "flutter,hwcodec,unix-file-copy-paste${{ matrix.job.extra-cargo-features }}"
 
       - name: Run the Rust tests
-        if: ${{ !inputs.upload-artifact && matrix.job.arch == 'aarch64' }}
+        if: ${{ env.UPLOAD_ARTIFACT != 'true' && matrix.job.arch == 'aarch64' }}
         run: |
           # The build's own features, so the tests see the code that ships. MACOSX_DEPLOYMENT_TARGET
           # comes from the build step's export.
@@ -1206,7 +1225,7 @@ jobs:
   publish-signed-update-metadata:
     needs: [build-for-windows-flutter, build-for-windows-sciter, build-for-macOS]
     runs-on: ubuntu-22.04
-    if: ${{ inputs.upload-artifact && inputs.publish-update-metadata && github.repository == 'rustdesk/rustdesk' }}
+    if: ${{ env.UPLOAD_ARTIFACT == 'true' && env.PUBLISH_UPDATE_METADATA == 'true' && github.repository == 'rustdesk/rustdesk' }}
     concurrency:
       group: signed-update-${{ inputs.upload-tag }}
       cancel-in-progress: false
@@ -1318,7 +1337,7 @@ jobs:
       - build-for-windows-flutter
       - build-for-windows-sciter
     runs-on: ubuntu-latest
-    if: ${{ inputs.upload-artifact }}
+    if: ${{ env.UPLOAD_ARTIFACT == 'true' }}
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -1694,7 +1713,7 @@ jobs:
   build-rustdesk-android-universal:
     needs: [build-rustdesk-android]
     name: build rustdesk android universal apk
-    if: ${{ inputs.upload-artifact }}
+    if: ${{ env.UPLOAD_ARTIFACT == 'true' }}
     runs-on: ubuntu-24.04
     env:
       reltype: release
@@ -2545,7 +2564,7 @@ jobs:
           path: ${{ env.DRM_DEB }}
 
   build-rustdesk-linux-sciter:
-    if: ${{ inputs.upload-artifact }}
+    if: ${{ env.UPLOAD_ARTIFACT == 'true' }}
     needs: [validate-update-metadata-keys]
     runs-on: ${{ matrix.job.on }}
     name: build-rustdesk-linux-sciter ${{ matrix.job.target }}
@@ -2791,7 +2810,7 @@ jobs:
     name: Build appimage ${{ matrix.job.target }}
     needs: [build-rustdesk-linux]
     runs-on: ubuntu-22.04
-    if: ${{ inputs.upload-artifact }}
+    if: ${{ env.UPLOAD_ARTIFACT == 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -2846,7 +2865,7 @@ jobs:
       - build-rustdesk-linux
       - build-rustdesk-linux-sciter
     runs-on: ${{ matrix.job.on }}
-    if: ${{ inputs.upload-artifact }}
+    if: ${{ env.UPLOAD_ARTIFACT == 'true' }}
     strategy:
       fail-fast: false
       matrix:
