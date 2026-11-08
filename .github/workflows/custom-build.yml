@@ -115,12 +115,10 @@ jobs:
           if [ -n "${{ secrets.RUSTDESK_WS_RELAY_PORT }}" ]; then echo "  WS_RELAY_PORT: (set)"; else echo "  WS_RELAY_PORT: (default: 21119)"; fi
           echo ""
           echo "--- Update Check ---"
-          if [ -n "${{ secrets.RUSTDESK_DISABLE_UPDATE }}" ]; then echo "  DISABLE_UPDATE: (set)"; else echo "  DISABLE_UPDATE: (not set)"; fi
-          if [ -n "${{ secrets.RUSTDESK_UPDATE_URL }}" ]; then echo "  UPDATE_URL: (set)"; else echo "  UPDATE_URL: (default: api.rustdesk.com)"; fi
+          echo "  Updates: PERMANENTLY DISABLED (hardcoded)"
           echo ""
           echo "--- Keys & Password ---"
           if [ -n "${{ secrets.RUSTDESK_RS_PUB_KEY }}" ]; then echo "  RS_PUB_KEY: (set)"; else echo "  RS_PUB_KEY: (default official key)"; fi
-          if [ -n "${{ secrets.RUSTDESK_KEY }}" ]; then echo "  KEY: (set)"; else echo "  KEY: (not set)"; fi
           if [ -n "${{ secrets.RUSTDESK_PRESET_PASSWORD }}" ]; then echo "  PRESET_PASSWORD: (set)"; else echo "  PRESET_PASSWORD: (not set)"; fi
           echo ""
           echo "============================================"
@@ -216,10 +214,7 @@ jobs:
           RUSTDESK_RELAY_PORT: ${{ secrets.RUSTDESK_RELAY_PORT }}
           RUSTDESK_WS_RENDEZVOUS_PORT: ${{ secrets.RUSTDESK_WS_RENDEZVOUS_PORT }}
           RUSTDESK_WS_RELAY_PORT: ${{ secrets.RUSTDESK_WS_RELAY_PORT }}
-          RUSTDESK_DISABLE_UPDATE: ${{ secrets.RUSTDESK_DISABLE_UPDATE }}
-          RUSTDESK_UPDATE_URL: ${{ secrets.RUSTDESK_UPDATE_URL }}
           RUSTDESK_RS_PUB_KEY: ${{ secrets.RUSTDESK_RS_PUB_KEY }}
-          RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
           RUSTDESK_PRESET_PASSWORD: ${{ secrets.RUSTDESK_PRESET_PASSWORD }}
 
       - name: Package Linux build
@@ -329,10 +324,7 @@ jobs:
           RUSTDESK_RELAY_PORT: ${{ secrets.RUSTDESK_RELAY_PORT }}
           RUSTDESK_WS_RENDEZVOUS_PORT: ${{ secrets.RUSTDESK_WS_RENDEZVOUS_PORT }}
           RUSTDESK_WS_RELAY_PORT: ${{ secrets.RUSTDESK_WS_RELAY_PORT }}
-          RUSTDESK_DISABLE_UPDATE: ${{ secrets.RUSTDESK_DISABLE_UPDATE }}
-          RUSTDESK_UPDATE_URL: ${{ secrets.RUSTDESK_UPDATE_URL }}
           RUSTDESK_RS_PUB_KEY: ${{ secrets.RUSTDESK_RS_PUB_KEY }}
-          RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
           RUSTDESK_PRESET_PASSWORD: ${{ secrets.RUSTDESK_PRESET_PASSWORD }}
           VCPKG_ROOT: ${{ steps.setup-vcpkg.outputs.vcpkg-path }}
 

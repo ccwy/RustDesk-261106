@@ -1058,23 +1058,9 @@ pub fn is_modifier(evt: &KeyEvent) -> bool {
 }
 
 pub fn check_software_update() {
-    // Injected at compile time via RUSTDESK_DISABLE_UPDATE.
-    // If set to "1" or "true", completely disable software update checks.
-    const DISABLE_UPDATE: bool = matches!(
-        option_env!("RUSTDESK_DISABLE_UPDATE"),
-        Some("1") | Some("true") | Some("TRUE") | Some("True")
-    );
-    if DISABLE_UPDATE {
-        log::info!("Software update check disabled by RUSTDESK_DISABLE_UPDATE (compile-time)");
-        return;
-    }
-    if is_custom_client() {
-        return;
-    }
-    let opt = LocalConfig::get_option(keys::OPTION_ENABLE_CHECK_UPDATE);
-    if config::option2bool(keys::OPTION_ENABLE_CHECK_UPDATE, &opt) {
-        std::thread::spawn(move || allow_err!(do_check_software_update()));
-    }
+    // Updates are permanently disabled in this custom build.
+    log::info!("Software update check is disabled in this build");
+    return;
 }
 
 pub(crate) fn release_id_from_update_url(update_url: &str) -> ResultType<String> {
@@ -2195,13 +2181,6 @@ pub async fn get_key(sync: bool) -> String {
         let mut options = crate::ipc::get_options_async().await;
         options.remove("key").unwrap_or_default()
     };
-    // Injected at compile time via RUSTDESK_KEY.
-    // If set, overrides the key config option.
-    if let Some(env_key) = option_env!("RUSTDESK_KEY") {
-        if !env_key.is_empty() {
-            return env_key.to_owned();
-        }
-    }
     if key.is_empty() {
         key = config::RS_PUB_KEY.clone();
     }

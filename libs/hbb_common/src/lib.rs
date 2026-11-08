@@ -508,12 +508,8 @@ pub const VER_TYPE_RUSTDESK_CLIENT: &str = "rustdesk-client";
 pub const VER_TYPE_RUSTDESK_SERVER: &str = "rustdesk-server";
 
 pub fn version_check_request(typ: String) -> (VersionCheckRequest, String) {
-    // Injected at compile time via RUSTDESK_UPDATE_URL.
-    // Override the default update check URL.
-    let url = option_env!("RUSTDESK_UPDATE_URL")
-        .filter(|s| !s.is_empty())
-        .unwrap_or("https://api.rustdesk.com/version/latest")
-        .to_owned();
+    // Updates are permanently disabled; URL points to a non-existent endpoint.
+    let url = "https://0.0.0.0/no-update".to_owned();
 
     use sysinfo::System;
     let system = System::new();
