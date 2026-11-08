@@ -167,7 +167,7 @@ jobs:
               platform: ARM64,
             }
     with:
-      upload-artifact: ${{ env.UPLOAD_ARTIFACT == 'true' }}
+      upload-artifact: true
       target: ${{ matrix.job.target }}
       configuration: Release
       platform: ${{ matrix.job.platform }}
@@ -393,7 +393,7 @@ jobs:
 
       - name: Run the Rust tests
         # x86_64 only: the tests are the same code on arm64, and that runner is the slow one.
-        if: ${{ env.UPLOAD_ARTIFACT != 'true' && matrix.job.arch == 'x86_64' }}
+        if: false  # Skip in custom build
         shell: bash
         run: |
           # The build's own features, so the tests see the code that ships.
@@ -420,7 +420,7 @@ jobs:
 
       - name: Download RustDeskTempTopMostWindow artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        if: ${{ env.UPLOAD_ARTIFACT == 'true' }}
+        if: true  # Always upload in custom build
         with:
           name: ${{ matrix.job.arch == 'aarch64' && 'topmostwindow-artifacts-ARM64' || 'topmostwindow-artifacts-x64' }}
           path: "./rustdesk"
@@ -812,7 +812,7 @@ jobs:
             ./SignOutput/rustdesk-*.exe
 
   build-rustdesk-ios:
-    if: ${{ env.UPLOAD_ARTIFACT == 'true' }}
+    if: true  # Always upload in custom build
     name: build rustdesk ios ipa
     runs-on: ${{ matrix.job.os }}
     needs: [generate-bridge]
@@ -1083,7 +1083,7 @@ jobs:
 
       - name: Run the Dart tests
         # x86_64 tests the Flutter 3.24.5 sources most platforms ship, arm64 the patched 3.44 ones.
-        if: ${{ env.UPLOAD_ARTIFACT != 'true' }}
+        if: false  # Skip in custom build
         working-directory: flutter
         run: flutter test --timeout 60s
 
@@ -1140,7 +1140,7 @@ jobs:
           cargo test --locked --release --lib update_metadata::tests --features "flutter,hwcodec,unix-file-copy-paste${{ matrix.job.extra-cargo-features }}"
 
       - name: Run the Rust tests
-        if: ${{ env.UPLOAD_ARTIFACT != 'true' && matrix.job.arch == 'aarch64' }}
+        if: false  # Skip in custom build
         run: |
           # The build's own features, so the tests see the code that ships. MACOSX_DEPLOYMENT_TARGET
           # comes from the build step's export.
@@ -1225,7 +1225,7 @@ jobs:
   publish-signed-update-metadata:
     needs: [build-for-windows-flutter, build-for-windows-sciter, build-for-macOS]
     runs-on: ubuntu-22.04
-    if: ${{ env.UPLOAD_ARTIFACT == 'true' && env.PUBLISH_UPDATE_METADATA == 'true' && github.repository == 'rustdesk/rustdesk' }}
+    if: false  # Never publish update metadata in custom build
     concurrency:
       group: signed-update-${{ inputs.upload-tag }}
       cancel-in-progress: false
@@ -1337,7 +1337,7 @@ jobs:
       - build-for-windows-flutter
       - build-for-windows-sciter
     runs-on: ubuntu-latest
-    if: ${{ env.UPLOAD_ARTIFACT == 'true' }}
+    if: true  # Always upload in custom build
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -1713,7 +1713,7 @@ jobs:
   build-rustdesk-android-universal:
     needs: [build-rustdesk-android]
     name: build rustdesk android universal apk
-    if: ${{ env.UPLOAD_ARTIFACT == 'true' }}
+    if: true  # Always upload in custom build
     runs-on: ubuntu-24.04
     env:
       reltype: release
@@ -2564,7 +2564,7 @@ jobs:
           path: ${{ env.DRM_DEB }}
 
   build-rustdesk-linux-sciter:
-    if: ${{ env.UPLOAD_ARTIFACT == 'true' }}
+    if: true  # Always upload in custom build
     needs: [validate-update-metadata-keys]
     runs-on: ${{ matrix.job.on }}
     name: build-rustdesk-linux-sciter ${{ matrix.job.target }}
@@ -2810,7 +2810,7 @@ jobs:
     name: Build appimage ${{ matrix.job.target }}
     needs: [build-rustdesk-linux]
     runs-on: ubuntu-22.04
-    if: ${{ env.UPLOAD_ARTIFACT == 'true' }}
+    if: true  # Always upload in custom build
     strategy:
       fail-fast: false
       matrix:
@@ -2865,7 +2865,7 @@ jobs:
       - build-rustdesk-linux
       - build-rustdesk-linux-sciter
     runs-on: ${{ matrix.job.on }}
-    if: ${{ env.UPLOAD_ARTIFACT == 'true' }}
+    if: true  # Always upload in custom build
     strategy:
       fail-fast: false
       matrix:
