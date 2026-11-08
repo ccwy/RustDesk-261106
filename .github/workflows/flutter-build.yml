@@ -25,6 +25,10 @@ on:
         default: "custom"
         type: string
 
+permissions:
+  contents: write
+  packages: write
+
 # NOTE: F-Droid builder script 'flutter/build_fdroid.sh' reads environment
 # variables from this workflow!
 #
