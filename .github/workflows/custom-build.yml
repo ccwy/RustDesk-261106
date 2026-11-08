@@ -5,7 +5,7 @@ name: Custom Build
 #
 # 使用方法：
 # 1. 在仓库 Settings → Secrets and variables → Actions → Secrets 中添加所有变量
-# 2. 手动触发此 workflow (Run workflow) 或推送 tag 触发
+# 2. 手动触发此 workflow (Run workflow)，输入版本号，或推送 tag 触发
 #
 # 所有配置统一使用 Actions Secrets，编译时通过 option_env!() 注入二进制文件
 # 编译时环境变量说明见 ENV_VARS.md
@@ -14,6 +14,16 @@ name: Custom Build
 on:
   workflow_dispatch:
     inputs:
+      version:
+        description: "版本号 (如 1.5.1)"
+        required: true
+        default: "1.5.1"
+        type: string
+      build_number:
+        description: "构建号 (Flutter build number，留空则自动用时间戳)"
+        required: false
+        default: ""
+        type: string
       target:
         description: "Build target"
         type: choice
@@ -22,6 +32,10 @@ on:
           - windows-x64
           - all
         default: linux-x64
+      create_release:
+        description: "编译后创建 GitHub Release"
+        type: boolean
+        default: true
   push:
     tags:
       - "v*"
@@ -35,36 +49,77 @@ env:
 
 jobs:
   # ===========================================================================
-  # 编译前输出配置摘要（Secrets 值不显示，只显示是否已设置）
+  # 准备阶段：确定版本号、输出配置摘要
   # ===========================================================================
-  config-summary:
-    name: Build Configuration Summary
+  prepare:
+    name: Prepare & Show Config
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.set-version.outputs.version }}
+      build_number: ${{ steps.set-version.outputs.build_number }}
+      tag: ${{ steps.set-version.outputs.tag }}
     steps:
+      - name: Determine version
+        id: set-version
+        run: |
+          # 确定版本号来源：
+          # - 手动触发：使用 inputs.version
+          # - tag 触发：从 tag 名提取 (v1.5.1 → 1.5.1)
+          # - release 触发：从 release tag 提取
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+            BUILD_NUMBER="${{ inputs.build_number }}"
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+            VERSION="${TAG#v}"
+            BUILD_NUMBER=""
+          elif [ "${{ github.event_name }}" = "release" ]; then
+            TAG="${{ github.event.release.tag_name }}"
+            VERSION="${TAG#v}"
+            BUILD_NUMBER=""
+          fi
+
+          # 如果未提供 build_number，用当前时间戳生成
+          if [ -z "$BUILD_NUMBER" ]; then
+            BUILD_NUMBER=$(date +%s)
+          fi
+
+          TAG="v${VERSION}"
+          echo "Version: $VERSION"
+          echo "Build number: $BUILD_NUMBER"
+          echo "Tag: $TAG"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "build_number=$BUILD_NUMBER" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
       - name: Show configuration
         run: |
           echo "============================================"
-          echo "  RustDesk Custom Build Configuration"
-          echo "  (all values from Actions Secrets)"
+          echo "  RustDesk Custom Build"
           echo "============================================"
           echo ""
-          echo "--- Server Configuration ---"
-          if [ -n "${{ secrets.RUSTDESK_RENDEZVOUS_SERVERS }}" ]; then echo "  RENDEZVOUS_SERVERS: (set)"; else echo "  RENDEZVOUS_SERVERS: (not set, default: rs-ny.rustdesk.com)"; fi
-          if [ -n "${{ secrets.RUSTDESK_CUSTOM_SERVER }}" ]; then echo "  CUSTOM_SERVER: (set)"; else echo "  CUSTOM_SERVER: (not set)"; fi
-          if [ -n "${{ secrets.RUSTDESK_API_SERVER }}" ]; then echo "  API_SERVER: (set)"; else echo "  API_SERVER: (not set, derived from config)"; fi
+          echo "--- Version ---"
+          echo "  Version:      ${{ steps.set-version.outputs.version }}"
+          echo "  Build number: ${{ steps.set-version.outputs.build_number }}"
+          echo "  Tag:          ${{ steps.set-version.outputs.tag }}"
           echo ""
-          echo "--- Port Configuration ---"
-          if [ -n "${{ secrets.RUSTDESK_RENDEZVOUS_PORT }}" ]; then echo "  RENDEZVOUS_PORT: (set)"; else echo "  RENDEZVOUS_PORT: (not set, default: 21116)"; fi
-          if [ -n "${{ secrets.RUSTDESK_RELAY_PORT }}" ]; then echo "  RELAY_PORT: (set)"; else echo "  RELAY_PORT: (not set, default: 21117)"; fi
-          if [ -n "${{ secrets.RUSTDESK_WS_RENDEZVOUS_PORT }}" ]; then echo "  WS_RENDEZVOUS_PORT: (set)"; else echo "  WS_RENDEZVOUS_PORT: (not set, default: 21118)"; fi
-          if [ -n "${{ secrets.RUSTDESK_WS_RELAY_PORT }}" ]; then echo "  WS_RELAY_PORT: (set)"; else echo "  WS_RELAY_PORT: (not set, default: 21119)"; fi
+          echo "--- Server Configuration (from Secrets) ---"
+          if [ -n "${{ secrets.RUSTDESK_RENDEZVOUS_SERVERS }}" ]; then echo "  RENDEZVOUS_SERVERS: (set)"; else echo "  RENDEZVOUS_SERVERS: (default: rs-ny.rustdesk.com)"; fi
+          if [ -n "${{ secrets.RUSTDESK_CUSTOM_SERVER }}" ]; then echo "  CUSTOM_SERVER: (set)"; else echo "  CUSTOM_SERVER: (not set)"; fi
+          if [ -n "${{ secrets.RUSTDESK_API_SERVER }}" ]; then echo "  API_SERVER: (set)"; else echo "  API_SERVER: (derived)"; fi
+          echo ""
+          echo "--- Ports ---"
+          if [ -n "${{ secrets.RUSTDESK_RENDEZVOUS_PORT }}" ]; then echo "  RENDEZVOUS_PORT: (set)"; else echo "  RENDEZVOUS_PORT: (default: 21116)"; fi
+          if [ -n "${{ secrets.RUSTDESK_RELAY_PORT }}" ]; then echo "  RELAY_PORT: (set)"; else echo "  RELAY_PORT: (default: 21117)"; fi
+          if [ -n "${{ secrets.RUSTDESK_WS_RENDEZVOUS_PORT }}" ]; then echo "  WS_RENDEZVOUS_PORT: (set)"; else echo "  WS_RENDEZVOUS_PORT: (default: 21118)"; fi
+          if [ -n "${{ secrets.RUSTDESK_WS_RELAY_PORT }}" ]; then echo "  WS_RELAY_PORT: (set)"; else echo "  WS_RELAY_PORT: (default: 21119)"; fi
           echo ""
           echo "--- Update Check ---"
-          if [ -n "${{ secrets.RUSTDESK_DISABLE_UPDATE }}" ]; then echo "  DISABLE_UPDATE: (set)"; else echo "  DISABLE_UPDATE: (not set, updates enabled)"; fi
-          if [ -n "${{ secrets.RUSTDESK_UPDATE_URL }}" ]; then echo "  UPDATE_URL: (set)"; else echo "  UPDATE_URL: (not set, default: api.rustdesk.com)"; fi
+          if [ -n "${{ secrets.RUSTDESK_DISABLE_UPDATE }}" ]; then echo "  DISABLE_UPDATE: (set)"; else echo "  DISABLE_UPDATE: (not set)"; fi
+          if [ -n "${{ secrets.RUSTDESK_UPDATE_URL }}" ]; then echo "  UPDATE_URL: (set)"; else echo "  UPDATE_URL: (default: api.rustdesk.com)"; fi
           echo ""
           echo "--- Keys & Password ---"
-          if [ -n "${{ secrets.RUSTDESK_RS_PUB_KEY }}" ]; then echo "  RS_PUB_KEY: (set)"; else echo "  RS_PUB_KEY: (not set, using default official key)"; fi
+          if [ -n "${{ secrets.RUSTDESK_RS_PUB_KEY }}" ]; then echo "  RS_PUB_KEY: (set)"; else echo "  RS_PUB_KEY: (default official key)"; fi
           if [ -n "${{ secrets.RUSTDESK_KEY }}" ]; then echo "  KEY: (set)"; else echo "  KEY: (not set)"; fi
           if [ -n "${{ secrets.RUSTDESK_PRESET_PASSWORD }}" ]; then echo "  PRESET_PASSWORD: (set)"; else echo "  PRESET_PASSWORD: (not set)"; fi
           echo ""
@@ -75,12 +130,32 @@ jobs:
   # ===========================================================================
   build-linux:
     name: Build Linux x86_64
-    needs: config-summary
+    needs: prepare
     runs-on: ubuntu-22.04
     if: github.event_name == 'push' || github.event_name == 'release' || inputs.target == 'linux-x64' || inputs.target == 'all'
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
+
+      - name: Set version number
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          BUILD_NUMBER="${{ needs.prepare.outputs.build_number }}"
+          echo "Setting version to $VERSION (build $BUILD_NUMBER)"
+
+          # 更新 Cargo.toml 版本号
+          sed -i "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
+          echo "Cargo.toml version updated to $VERSION"
+
+          # 更新 flutter/pubspec.yaml 版本号
+          sed -i "s/^version: .*/version: ${VERSION}+${BUILD_NUMBER}/" flutter/pubspec.yaml
+          echo "pubspec.yaml version updated to ${VERSION}+${BUILD_NUMBER}"
+
+          # 验证
+          echo "--- Cargo.toml ---"
+          grep '^version' Cargo.toml
+          echo "--- pubspec.yaml ---"
+          grep '^version:' flutter/pubspec.yaml
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@v1
@@ -134,7 +209,6 @@ jobs:
       - name: Build RustDesk (with env var injection from Secrets)
         run: flutter build linux --release
         env:
-          # === 所有配置统一从 Actions Secrets 读取 ===
           RUSTDESK_RENDEZVOUS_SERVERS: ${{ secrets.RUSTDESK_RENDEZVOUS_SERVERS }}
           RUSTDESK_CUSTOM_SERVER: ${{ secrets.RUSTDESK_CUSTOM_SERVER }}
           RUSTDESK_API_SERVER: ${{ secrets.RUSTDESK_API_SERVER }}
@@ -150,22 +224,38 @@ jobs:
 
       - name: Package Linux build
         run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
           cd flutter/build/linux/x64/release/bundle
-          tar czf /tmp/rustdesk-linux-x64.tar.gz .
-          echo "Linux package created at /tmp/rustdesk-linux-x64.tar.gz"
+          tar czf /tmp/rustdesk-${VERSION}-linux-x64.tar.gz .
+          echo "Linux package: /tmp/rustdesk-${VERSION}-linux-x64.tar.gz"
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
         with:
-          name: rustdesk-linux-x64
-          path: /tmp/rustdesk-linux-x64.tar.gz
+          name: rustdesk-${{ needs.prepare.outputs.version }}-linux-x64
+          path: /tmp/rustdesk-${{ needs.prepare.outputs.version }}-linux-x64.tar.gz
           retention-days: 30
 
-      - name: Upload to Release (if tag)
+      - name: Create tag and release
+        if: github.event_name == 'workflow_dispatch' && inputs.create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          name: ${{ needs.prepare.outputs.tag }}
+          files: /tmp/rustdesk-${{ needs.prepare.outputs.version }}-linux-x64.tar.gz
+          body: |
+            RustDesk ${{ needs.prepare.outputs.version }}
+
+            Custom build with compile-time env var injection.
+            See [ENV_VARS.md](ENV_VARS.md) for configuration details.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload to existing release (tag trigger)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
-          files: /tmp/rustdesk-linux-x64.tar.gz
+          files: /tmp/rustdesk-${{ needs.prepare.outputs.version }}-linux-x64.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -174,12 +264,33 @@ jobs:
   # ===========================================================================
   build-windows:
     name: Build Windows x86_64
-    needs: config-summary
+    needs: prepare
     runs-on: windows-2022
     if: github.event_name == 'push' || github.event_name == 'release' || inputs.target == 'windows-x64' || inputs.target == 'all'
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
+
+      - name: Set version number
+        shell: bash
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          BUILD_NUMBER="${{ needs.prepare.outputs.build_number }}"
+          echo "Setting version to $VERSION (build $BUILD_NUMBER)"
+
+          # 更新 Cargo.toml 版本号
+          sed -i "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
+          echo "Cargo.toml version updated to $VERSION"
+
+          # 更新 flutter/pubspec.yaml 版本号
+          sed -i "s/^version: .*/version: ${VERSION}+${BUILD_NUMBER}/" flutter/pubspec.yaml
+          echo "pubspec.yaml version updated to ${VERSION}+${BUILD_NUMBER}"
+
+          # 验证
+          echo "--- Cargo.toml ---"
+          grep '^version' Cargo.toml
+          echo "--- pubspec.yaml ---"
+          grep '^version:' flutter/pubspec.yaml
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@v1
@@ -211,7 +322,6 @@ jobs:
       - name: Build RustDesk (with env var injection from Secrets)
         run: flutter build windows --release
         env:
-          # === 所有配置统一从 Actions Secrets 读取 ===
           RUSTDESK_RENDEZVOUS_SERVERS: ${{ secrets.RUSTDESK_RENDEZVOUS_SERVERS }}
           RUSTDESK_CUSTOM_SERVER: ${{ secrets.RUSTDESK_CUSTOM_SERVER }}
           RUSTDESK_API_SERVER: ${{ secrets.RUSTDESK_API_SERVER }}
@@ -227,21 +337,38 @@ jobs:
           VCPKG_ROOT: ${{ steps.setup-vcpkg.outputs.vcpkg-path }}
 
       - name: Package Windows build
+        shell: bash
         run: |
-          Compress-Archive -Path flutter\build\windows\x64\runner\Release\* -DestinationPath rustdesk-windows-x64.zip
-          echo "Windows package created"
+          VERSION="${{ needs.prepare.outputs.version }}"
+          Compress-Archive -Path flutter\build\windows\x64\runner\Release\* -DestinationPath rustdesk-${VERSION}-windows-x64.zip
+          echo "Windows package: rustdesk-${VERSION}-windows-x64.zip"
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
-          name: rustdesk-windows-x64
-          path: rustdesk-windows-x64.zip
+          name: rustdesk-${{ needs.prepare.outputs.version }}-windows-x64
+          path: rustdesk-${{ needs.prepare.outputs.version }}-windows-x64.zip
           retention-days: 30
 
-      - name: Upload to Release (if tag)
+      - name: Create tag and release
+        if: github.event_name == 'workflow_dispatch' && inputs.create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          name: ${{ needs.prepare.outputs.tag }}
+          files: rustdesk-${{ needs.prepare.outputs.version }}-windows-x64.zip
+          body: |
+            RustDesk ${{ needs.prepare.outputs.version }}
+
+            Custom build with compile-time env var injection.
+            See [ENV_VARS.md](ENV_VARS.md) for configuration details.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload to existing release (tag trigger)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
-          files: rustdesk-windows-x64.zip
+          files: rustdesk-${{ needs.prepare.outputs.version }}-windows-x64.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
