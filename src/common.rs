@@ -1354,6 +1354,9 @@ pub fn get_local_option(key: &str) -> String {
             }
         }
     }
+    if key == keys::OPTION_ENABLE_CHECK_UPDATE && v.is_empty() {
+        return "N".to_owned();
+    }
     if key == "lang" && (v == "pt" || v == "br") {
         return "pt-br".to_owned();
     }
