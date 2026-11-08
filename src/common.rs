@@ -3267,9 +3267,11 @@ mod tests {
 
     #[test]
     fn test_api_server_from_bare_ipv6_rendezvous_server() {
+        // API server is no longer derived from rendezvous server in custom build.
+        // get_api_server_ returns empty string when api is not configured.
         assert_eq!(
             get_api_server_("".to_owned(), "2001:db8::1".to_owned()),
-            "http://[2001:db8::1]:21114"
+            ""
         );
     }
 
